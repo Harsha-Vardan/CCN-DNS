@@ -59,6 +59,13 @@ def parse_dns_response(data):
     for _ in range(arcount):
         result['additionals'].append(parse_record(reader, data))
         
+    # Calculate effective TTL (min of all answers)
+    if result['answers']:
+        min_ttl = min(r['ttl'] for r in result['answers'])
+        result['ttl'] = min_ttl
+    else:
+        result['ttl'] = 300 # Default if no answers
+        
     return result
 
 def read_name(reader, data):

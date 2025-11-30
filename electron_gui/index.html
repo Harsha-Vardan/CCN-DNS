@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Advanced DNS Resolver</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h2>DNS Resolver</h2>
+            <nav>
+                <button class="nav-btn active" onclick="showTab('lookup')">🔍 Lookup</button>
+                <button class="nav-btn" onclick="showTab('path')">🗺️ Path</button>
+                <button class="nav-btn" onclick="showTab('cache')">📦 Cache</button>
+                <button class="nav-btn" onclick="showTab('packet')">📡 Packet</button>
+                <button class="nav-btn" onclick="showTab('benchmark')">📊 Benchmark</button>
+            </nav>
+            <div class="status">
+                <p>Status: <span id="status-indicator" class="online">Online</span></p>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <!-- Lookup Tab -->
+            <div id="lookup" class="tab-content active">
+                <h1>DNS Lookup</h1>
+                <div class="control-panel">
+                    <div class="input-group">
+                        <label>Domain</label>
+                        <input type="text" id="domain-input" value="google.com" placeholder="Enter domain...">
+                    </div>
+                    <div class="input-group">
+                        <label>Type</label>
+                        <select id="type-input">
+                            <option value="A">A</option>
+                            <option value="AAAA">AAAA</option>
+                            <option value="NS">NS</option>
+                            <option value="CNAME">CNAME</option>
+                            <option value="MX">MX</option>
+                            <option value="TXT">TXT</option>
+                            <option value="PTR">PTR</option>
+                            <option value="SOA">SOA</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Mode</label>
+                        <select id="mode-input">
+                            <option value="auto">Auto</option>
+                            <option value="recursive">Recursive</option>
+                            <option value="forward">Forward</option>
+                            <option value="doh">DoH</option>
+                        </select>
+                    </div>
+                    <button id="resolve-btn" onclick="resolveDNS()">Resolve</button>
+                </div>
+                
+                <div id="results-area" class="results-container">
+                    <!-- Results will be injected here -->
+                    <div class="placeholder-text">Enter a domain and click Resolve</div>
+                </div>
+            </div>
+
+            <!-- Path Tab -->
+            <div id="path" class="tab-content">
+                <h1>Path Visualizer</h1>
+                <div class="control-panel">
+                    <input type="text" id="path-domain" value="google.com" placeholder="Enter domain...">
+                    <button onclick="renderPath()">Visualize Path</button>
+                </div>
+                <div id="path-diagram" class="diagram-container">
+                    <div class="placeholder-text">Enter a domain to see the resolution path.</div>
+                </div>
+            </div>
+
+            <!-- Cache Tab -->
+            <div id="cache" class="tab-content">
+                <h1>Cache Viewer</h1>
+                <div class="control-panel" style="justify-content: space-between;">
+                    <div id="cache-stats">Stats: Hits: 0 | Misses: 0 | Size: 0</div>
+                    <div>
+                        <button onclick="clearCache()" style="background: var(--error-color); margin-right: 10px;">Clear Cache</button>
+                        <button onclick="refreshCache()">Refresh Cache</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table id="cache-table">
+                        <thead>
+                            <tr>
+                                <th>Domain</th>
+                                <th>Type</th>
+                                <th>TTL (s)</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cache-body">
+                            <!-- Cache rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Packet Tab -->
+            <div id="packet" class="tab-content">
+                <h1>Packet Inspector</h1>
+                <div class="control-panel">
+                    <input type="text" id="packet-domain" value="example.com">
+                    <select id="packet-type">
+                        <option value="A">A</option>
+                        <option value="AAAA">AAAA</option>
+                    </select>
+                    <button onclick="generatePacket()">Generate</button>
+                </div>
+                <pre id="packet-output" class="code-block"></pre>
+            </div>
+
+            <!-- Benchmark Tab -->
+            <div id="benchmark" class="tab-content">
+                <h1>DNS Benchmark</h1>
+                <div class="control-panel">
+                    <button onclick="runBenchmark()">Run Benchmark</button>
+                    <div style="margin-left: 15px; color: #a6adc8; font-size: 14px;">
+                        Compares Local Resolver vs Google (8.8.8.8) vs Cloudflare (1.1.1.1)
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table id="benchmark-table">
+                        <thead>
+                            <tr>
+                                <th>Domain</th>
+                                <th>Custom DNS (ms)</th>
+                                <th>Google (ms)</th>
+                                <th>Cloudflare (ms)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="benchmark-body">
+                            <tr><td colspan="4" class="placeholder-text">Click Run Benchmark to start...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>mermaid.initialize({ startOnLoad: true, theme: 'dark' });</script>
+    <script src="renderer.js"></script>
+</body>
+</html>

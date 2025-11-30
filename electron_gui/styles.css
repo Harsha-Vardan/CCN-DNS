@@ -1,0 +1,241 @@
+:root {
+    --bg-color: #1e1e2e;
+    --sidebar-bg: #181825;
+    --text-color: #cdd6f4;
+    --accent-color: #89b4fa;
+    --secondary-color: #45475a;
+    --success-color: #a6e3a1;
+    --error-color: #f38ba8;
+    --card-bg: #313244;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    height: 100vh;
+    overflow: hidden;
+}
+
+.container {
+    display: flex;
+    height: 100%;
+}
+
+.sidebar {
+    width: 250px;
+    background-color: var(--sidebar-bg);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar h2 {
+    color: var(--accent-color);
+    margin-bottom: 30px;
+}
+
+.nav-btn {
+    background: none;
+    border: none;
+    color: var(--text-color);
+    padding: 15px;
+    text-align: left;
+    width: 100%;
+    cursor: pointer;
+    font-size: 16px;
+    border-radius: 8px;
+    transition: background 0.2s;
+    margin-bottom: 5px;
+}
+
+.nav-btn:hover {
+    background-color: var(--secondary-color);
+}
+
+.nav-btn.active {
+    background-color: var(--accent-color);
+    color: var(--sidebar-bg);
+    font-weight: bold;
+}
+
+.main-content {
+    flex: 1;
+    padding: 30px;
+    overflow-y: auto;
+}
+
+.tab-content {
+    display: none;
+    animation: fadeIn 0.3s;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.control-panel {
+    background-color: var(--card-bg);
+    padding: 20px;
+    border-radius: 12px;
+    display: flex;
+    gap: 15px;
+    align-items: flex-end;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+label {
+    font-size: 12px;
+    color: #a6adc8;
+}
+
+input, select {
+    background-color: var(--sidebar-bg);
+    border: 1px solid var(--secondary-color);
+    color: var(--text-color);
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+}
+
+input:focus, select:focus {
+    border-color: var(--accent-color);
+}
+
+button {
+    background-color: var(--accent-color);
+    color: var(--sidebar-bg);
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: opacity 0.2s;
+}
+
+button:hover {
+    opacity: 0.9;
+}
+
+.results-container {
+    background-color: var(--card-bg);
+    padding: 20px;
+    border-radius: 12px;
+    min-height: 200px;
+}
+
+.result-item {
+    background-color: var(--sidebar-bg);
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.result-name {
+    font-weight: bold;
+    color: var(--accent-color);
+}
+
+.result-type {
+    background-color: var(--secondary-color);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.visit-btn {
+    background-color: var(--success-color);
+    color: #1e1e2e;
+    text-decoration: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.code-block {
+    background-color: #11111b;
+    padding: 15px;
+    border-radius: 8px;
+    font-family: monospace;
+    white-space: pre-wrap;
+}
+
+.placeholder-text {
+    color: var(--secondary-color);
+    text-align: center;
+    margin-top: 50px;
+}
+
+/* Table Styles */
+.table-container {
+    background-color: var(--card-bg);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid var(--secondary-color);
+}
+
+th {
+    background-color: var(--sidebar-bg);
+    color: var(--accent-color);
+}
+
+tr:hover {
+    background-color: var(--secondary-color);
+}
+
+/* Diagram Styles */
+.diagram-container {
+    background-color: var(--card-bg);
+    padding: 20px;
+    border-radius: 12px;
+    min-height: 300px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-color);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--secondary-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-color);
+}
