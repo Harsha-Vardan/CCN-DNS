@@ -31,6 +31,7 @@ A full-featured, Python-based DNS resolution system that implements **Recursive*
 ### Prerequisites
 - Python 3.9+
 - `pip`
+- Node.js and `npm` (for Electron GUI)
 
 ### Setup
 1. Clone the repository:
@@ -43,7 +44,16 @@ A full-featured, Python-based DNS resolution system that implements **Recursive*
    ```bash
    pip install streamlit requests graphviz pandas
    ```
+   ```
    *(Note: `graphviz` also requires the Graphviz system binary to be installed and in your PATH for the visualization to work)*
+
+3. Install Electron GUI dependencies:
+   ```bash
+   cd electron_gui
+   npm install
+   cd ..
+   ```
+   *(This restores the `node_modules` folder required for the GUI)*
 
 ---
 
@@ -56,7 +66,16 @@ streamlit run gui/app_streamlit.py
 ```
 Open your browser to the URL shown (usually `http://localhost:8501`).
 
-### 2. Run the Local DNS Server
+
+
+### 2. Run the Electron GUI
+Launch the desktop application.
+```bash
+cd electron_gui
+npm start
+```
+
+### 3. Run the Local DNS Server
 (Optional) Start the local UDP server to accept standard DNS queries.
 ```bash
 # You may need to run this script directly or adapt it to run as a standalone service
@@ -67,7 +86,7 @@ Query it using `dig`:
 dig @127.0.0.1 -p 5353 google.com
 ```
 
-### 3. Run Tests
+### 4. Run Tests
 Verify the integrity of the system by running the unit test suite.
 ```bash
 python -m unittest discover tests
