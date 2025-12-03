@@ -33,7 +33,12 @@ function startPythonBackend() {
   });
 
   pythonProcess.stderr.on('data', (data) => {
-    console.error(`Python Error: ${data}`);
+    const str = data.toString();
+    if (str.includes('ERROR') || str.includes('Traceback')) {
+        console.error(`Python Error: ${str}`);
+    } else {
+        console.log(`Python Log: ${str}`);
+    }
   });
 }
 

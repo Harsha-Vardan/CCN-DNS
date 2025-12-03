@@ -32,6 +32,14 @@ MAX_RETRIES = 3
 # Cache Configuration
 CACHE_SIZE = 1000
 DEFAULT_TTL = 300  # seconds
+CACHE_BACKEND = 'mongodb'  # Options: 'memory', 'mongodb', 'postgresql'
+
+# MongoDB Configuration
+MONGO_URI = 'mongodb://localhost:27017/'
+MONGO_DB_NAME = 'dns_resolver'
+
+# PostgreSQL Configuration
+POSTGRES_URI = 'postgresql://user:password@localhost:5432/dns_resolver'
 
 # DNS Record Types
 TYPE_A = 1

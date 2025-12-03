@@ -34,12 +34,14 @@ def resolve():
     
     try:
         # Debug: Print stats before resolve
-        print(f"Before Resolve - Hits: {resolver.cache.hits}, Misses: {resolver.cache.misses}")
+        stats = resolver.cache.get_stats()
+        print(f"Before Resolve - Hits: {stats.get('hits', '?')}, Misses: {stats.get('misses', '?')}")
         
         result = resolver.resolve(domain, record_type, mode)
         
         # Debug: Print stats after resolve
-        print(f"After Resolve - Hits: {resolver.cache.hits}, Misses: {resolver.cache.misses}")
+        stats = resolver.cache.get_stats()
+        print(f"After Resolve - Hits: {stats.get('hits', '?')}, Misses: {stats.get('misses', '?')}")
         
         return jsonify(result)
     except Exception as e:
@@ -53,7 +55,7 @@ def get_cache():
     
     # Access the internal cache storage
     # Key is (domain, type), Value is (record, timestamp)
-    for key, value in resolver.cache.cache.items():
+    for key, value in resolver.cache.get_all():
         domain, rtype = key
         record, timestamp = value
         
@@ -75,9 +77,7 @@ def get_cache():
 
 @app.route('/cache', methods=['DELETE'])
 def clear_cache():
-    resolver.cache.cache.clear()
-    resolver.cache.hits = 0
-    resolver.cache.misses = 0
+    resolver.cache.clear()
     return jsonify({'message': 'Cache cleared successfully'})
 
 @app.route('/packet', methods=['POST'])
@@ -109,7 +109,7 @@ def run_benchmark():
     
     # We need to iterate a copy because accessing cache might mutate it (if we used get)
     # But here we are accessing the dict directly.
-    for key, value in list(resolver.cache.cache.items()):
+    for key, value in resolver.cache.get_all():
         record, timestamp = value
         ttl = record.get('ttl', 300)
         # Add 5 second safety buffer to ensure it doesn't expire during benchmark
