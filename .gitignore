@@ -1,5 +1,19 @@
+# Python
 __pycache__/
 *.pyc
-node_modules/
+*.pyo
 .env
 .DS_Store
+
+# Compiled C++ binaries
+core/*.exe
+core/dns_resolver
+
+# Test scripts (local smoke-tests, not part of the project deliverable)
+tests/
+
+# IDE / OS
+node_modules/
+.vscode/
+*.swp
+Thumbs.db

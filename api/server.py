@@ -26,6 +26,7 @@ import os
 import sys
 import json
 import time
+import random
 import subprocess
 import threading
 import socket
@@ -50,7 +51,7 @@ BINARY_PATH = _BINARY_WIN if os.path.exists(_BINARY_WIN) else _BINARY_NIX
 CACHE_CAPACITY  = 1000
 DEFAULT_TTL     = 300    # seconds
 API_PORT        = 5000
-RESOLVER_TIMEOUT = 15    # seconds to wait for the C++ process
+RESOLVER_TIMEOUT = 30    # seconds — CNAME chains need extra time
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  In-process Python-side LRU + TTL cache
@@ -206,6 +207,7 @@ def run_cpp_resolver(domain: str, qtype: str = "A") -> dict:
         raise RuntimeError(f"C++ resolver returned invalid JSON: {e}")
 
 
+
 def send_udp_query(domain: str, server_ip: str, qtype_id: int = 1) -> float:
     """
     Quick UDP query helper for benchmark comparisons.
@@ -228,6 +230,148 @@ def send_udp_query(domain: str, server_ip: str, qtype_id: int = 1) -> float:
         return round(rtt, 2)
     except Exception:
         return -1.0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Fallback resolver — queries 8.8.8.8 directly when C++ walk fails
+#  Handles pointer-compressed DNS responses and all common record types.
+# ─────────────────────────────────────────────────────────────────────────────
+
+QTYPE_IDS = {"A": 1, "AAAA": 28, "NS": 2, "MX": 15,
+             "CNAME": 5, "TXT": 16, "PTR": 12, "SOA": 6}
+RTYPE_NAMES = {1: "A", 28: "AAAA", 2: "NS", 5: "CNAME",
+               15: "MX", 16: "TXT", 12: "PTR", 6: "SOA"}
+
+
+def _fb_parse_name(pkt: bytes, offset: int) -> tuple:
+    """Parse DNS name with pointer compression. Returns (name_str, new_offset)."""
+    labels, visited, jumped, jump_offset = [], set(), False, 0
+    while offset < len(pkt):
+        if offset in visited:
+            break
+        visited.add(offset)
+        length = pkt[offset]
+        if length == 0:
+            if not jumped:
+                offset += 1
+            else:
+                offset = jump_offset
+            break
+        elif (length & 0xC0) == 0xC0:
+            if offset + 1 >= len(pkt):
+                break
+            ptr = ((length & 0x3F) << 8) | pkt[offset + 1]
+            if not jumped:
+                jump_offset = offset + 2
+            jumped = True
+            offset = ptr
+        else:
+            offset += 1
+            labels.append(pkt[offset:offset + length].decode('ascii', errors='replace'))
+            offset += length
+    return '.'.join(labels), (jump_offset if jumped else offset)
+
+
+def _fb_parse_rdata(pkt: bytes, offset: int, rdlength: int, rtype: int) -> str:
+    """Parse RDATA field for common DNS record types."""
+    end = offset + rdlength
+    try:
+        if rtype == 1 and rdlength == 4:             # A
+            return '.'.join(str(b) for b in pkt[offset:offset + 4])
+        elif rtype == 28 and rdlength == 16:          # AAAA
+            parts = [f"{(pkt[offset+i]<<8)|pkt[offset+i+1]:04x}" for i in range(0, 16, 2)]
+            return ':'.join(parts)
+        elif rtype in (2, 5, 12):                     # NS, CNAME, PTR
+            name, _ = _fb_parse_name(pkt, offset)
+            return name
+        elif rtype == 15:                             # MX
+            pref = (pkt[offset] << 8) | pkt[offset + 1]
+            name, _ = _fb_parse_name(pkt, offset + 2)
+            return f"{pref} {name}"
+        elif rtype == 16:                             # TXT
+            result, pos = [], offset
+            while pos < end:
+                slen = pkt[pos]; pos += 1
+                result.append(pkt[pos:pos + slen].decode('utf-8', errors='replace'))
+                pos += slen
+            return ''.join(result)
+        else:
+            return pkt[offset:end].hex()
+    except Exception:
+        return ""
+
+
+def fallback_resolve(domain: str, qtype: str = "A",
+                     server: str = "8.8.8.8") -> list:
+    """
+    Direct UDP DNS query with RD=1 to a public resolver (default: Google 8.8.8.8).
+    Returns a list of answer dicts matching the C++ resolver answer format.
+    Called when the recursive C++ walk times out or fails for complex domains
+    (e.g. instagram.com, facebook.com which have deep CNAME chains via CDN).
+    """
+    qtype_id = QTYPE_IDS.get(qtype.upper(), 1)
+    try:
+        tid    = random.randint(1, 65535)
+        flags  = 0x0100   # RD=1
+        parts  = domain.rstrip('.').split('.')
+        qname  = b''.join(bytes([len(p)]) + p.encode() for p in parts) + b'\x00'
+        pkt    = struct.pack('!HHHHHH', tid, flags, 1, 0, 0, 0)
+        pkt   += qname + struct.pack('!HH', qtype_id, 1)
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(5.0)
+        sock.sendto(pkt, (server, 53))
+        resp, _ = sock.recvfrom(4096)
+        sock.close()
+
+        if len(resp) < 12:
+            return []
+
+        resp_id  = (resp[0] << 8) | resp[1]
+        rcode    = resp[3] & 0x0F
+        ancount  = (resp[6] << 8) | resp[7]
+        if rcode != 0 or ancount == 0:
+            return []
+
+        # Skip question section
+        pos = 12
+        qdcount = (resp[4] << 8) | resp[5]
+        for _ in range(qdcount):
+            # Skip QNAME
+            while pos < len(resp):
+                length = resp[pos]
+                if length == 0:
+                    pos += 1; break
+                elif (length & 0xC0) == 0xC0:
+                    pos += 2; break
+                else:
+                    pos += length + 1
+            pos += 4   # skip QTYPE + QCLASS
+
+        answers = []
+        for _ in range(ancount):
+            if pos + 12 > len(resp):
+                break
+            name, pos = _fb_parse_name(resp, pos)
+            if pos + 10 > len(resp):
+                break
+            rtype    = (resp[pos] << 8) | resp[pos + 1]; pos += 2
+            _cls     = (resp[pos] << 8) | resp[pos + 1]; pos += 2
+            ttl      = int.from_bytes(resp[pos:pos + 4], 'big');  pos += 4
+            rdlength = (resp[pos] << 8) | resp[pos + 1];          pos += 2
+            data = _fb_parse_rdata(resp, pos, rdlength, rtype)
+            pos += rdlength
+            answers.append({
+                "name":  name or domain,
+                "type":  RTYPE_NAMES.get(rtype, str(rtype)),
+                "ttl":   ttl,
+                "data":  data,
+            })
+        return answers
+    except Exception:
+        return []
+
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -312,11 +456,54 @@ def resolve():
     try:
         cpp_result = run_cpp_resolver(domain, qtype)
     except RuntimeError as e:
+        # C++ resolver timed-out or errored — try fallback to 8.8.8.8
+        fallback_answers = fallback_resolve(domain, qtype)
+        latency_ms = round((time.perf_counter() - t0) * 1000, 3)
+        if fallback_answers:
+            ip = next((a["data"] for a in fallback_answers if a["type"] == qtype), "")
+            if not ip and fallback_answers:
+                ip = fallback_answers[0]["data"]
+            response_body = {
+                "domain":          domain,
+                "ip":              ip,
+                "record_type":     qtype,
+                "cached":          False,
+                "latency_ms":      latency_ms,
+                "answers":         fallback_answers,
+                "resolution_path": ["8.8.8.8"],
+                "used_tcp":        False,
+                "note":            "resolved via 8.8.8.8 fallback (recursive walk timed out)",
+            }
+            ttl = next((a["ttl"] for a in fallback_answers if a.get("ttl", 0) > 0), 300)
+            cache.put(cache_key, dict(response_body), ttl=ttl)
+            metrics.record(domain, qtype, latency_ms, True, False, False)
+            return jsonify(response_body)
         return jsonify({"error": str(e)}), 503
 
     latency_ms = round((time.perf_counter() - t0) * 1000, 3)
 
     if not cpp_result.get("success"):
+        # C++ walk returned failure — try Python fallback before giving up
+        fallback_answers = fallback_resolve(domain, qtype)
+        if fallback_answers:
+            ip = next((a["data"] for a in fallback_answers if a["type"] == qtype), "")
+            if not ip and fallback_answers:
+                ip = fallback_answers[0]["data"]
+            response_body = {
+                "domain":          domain,
+                "ip":              ip,
+                "record_type":     qtype,
+                "cached":          False,
+                "latency_ms":      latency_ms,
+                "answers":         fallback_answers,
+                "resolution_path": cpp_result.get("resolution_path", []) + ["8.8.8.8"],
+                "used_tcp":        False,
+                "note":            "resolved via 8.8.8.8 fallback (recursive walk incomplete)",
+            }
+            ttl = next((a["ttl"] for a in fallback_answers if a.get("ttl", 0) > 0), 300)
+            cache.put(cache_key, dict(response_body), ttl=ttl)
+            metrics.record(domain, qtype, latency_ms, True, False, False)
+            return jsonify(response_body)
         return jsonify({
             "error":      cpp_result.get("error", "Resolution failed"),
             "domain":     domain,

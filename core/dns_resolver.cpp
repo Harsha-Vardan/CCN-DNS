@@ -594,36 +594,56 @@ std::string Resolver::walk(const std::string& domain, uint16_t qtype,
                             bool& used_tcp, int depth) {
     if (depth > MAX_REFERRALS) return "";
 
+    // Avoid revisiting the same server in a single resolution chain
+    for (const auto& p : path)
+        if (p == ns_ip) return "";
+
     auto query = build_query(domain, qtype, 0, false);  // RD=false for recursive walk
 
     path.push_back(ns_ip);
-    auto sr = send_query(query, ns_ip);
+    auto sr = send_udp(query, ns_ip, 53, 2.0);  // 2-second timeout per hop
     if (!sr.ok) return "";
     if (sr.used_tcp) used_tcp = true;
+
+    // If truncated, retry via TCP
+    if (sr.truncated) {
+        auto tr = send_tcp(query, ns_ip, 53, 5.0);
+        if (tr.ok) { sr = tr; used_tcp = true; }
+    }
 
     Response resp;
     try {
         resp = parse_response(sr.data);
     } catch (...) { return ""; }
 
+    // ── NXDOMAIN ─────────────────────────────────────────────────────────────
+    if (resp.rcode == 3) return "";   // NXDOMAIN
+
     // ── Answers ──────────────────────────────────────────────────────────────
     if (!resp.answers.empty()) {
         // Check for CNAME chain
+        std::string cname_target;
         for (const auto& ans : resp.answers) {
             if (ans.type == TYPE_CNAME && qtype != TYPE_CNAME) {
-                // Follow CNAME — restart from roots with the new name
-                return walk(ans.data, qtype,
-                    ROOT_SERVERS[std::rand() % NUM_ROOT_SERVERS],
-                    path, used_tcp, depth + 1);
+                cname_target = ans.data;
             }
             if (ans.type == qtype) return ans.data;
         }
+        // Follow CNAME if found — try from current server first, then roots
+        if (!cname_target.empty()) {
+            // Try asking the same server about the CNAME target
+            auto r = walk(cname_target, qtype, ns_ip, path, used_tcp, depth + 1);
+            if (!r.empty()) return r;
+            // Fall back to root-servers for the CNAME target
+            for (int i = 0; i < 3; ++i) {
+                int idx = std::rand() % NUM_ROOT_SERVERS;
+                r = walk(cname_target, qtype, ROOT_SERVERS[idx], path, used_tcp, depth + 1);
+                if (!r.empty()) return r;
+            }
+        }
         // If answers exist but none match qtype, return data of first answer
-        return resp.answers[0].data;
+        if (!resp.answers.empty()) return resp.answers[0].data;
     }
-
-    // ── NXDOMAIN ─────────────────────────────────────────────────────────────
-    if (resp.rcode == 3) return "";   // NXDOMAIN
 
     // ── NS referral (delegation) ──────────────────────────────────────────────
     if (resp.authorities.empty()) return "";
@@ -640,9 +660,9 @@ std::string Resolver::walk(const std::string& domain, uint16_t qtype,
 
         std::string next_ip;
         if (glue.count(ns_name)) {
-            next_ip = glue[ns_name];                        // use glue record
+            next_ip = glue[ns_name];                             // use glue record
         } else {
-            next_ip = resolve_ns_name(ns_name, path, used_tcp);  // glue-less
+            next_ip = resolve_ns_name(ns_name, used_tcp);       // glue-less: isolated lookup
         }
 
         if (!next_ip.empty()) {
@@ -654,12 +674,16 @@ std::string Resolver::walk(const std::string& domain, uint16_t qtype,
     return "";
 }
 
-// Resolve an NS hostname to an IP by restarting from the root servers.
+// Resolve an NS hostname to an IP using a fresh, isolated resolution.
+// Uses a separate path vector to avoid polluting the main resolution path
+// and to avoid loop-detection false positives.
 std::string Resolver::resolve_ns_name(const std::string& ns_name,
-                                       std::vector<std::string>& path,
                                        bool& used_tcp) {
-    for (int i = 0; i < NUM_ROOT_SERVERS; ++i) {
-        auto ip = walk(ns_name, TYPE_A, ROOT_SERVERS[i], path, used_tcp, 0);
+    // Try up to 4 different root servers to find this NS's IP
+    for (int attempt = 0; attempt < 4; ++attempt) {
+        int idx = (attempt * 3) % NUM_ROOT_SERVERS;  // spread across root servers
+        std::vector<std::string> ns_path;
+        auto ip = walk(ns_name, TYPE_A, ROOT_SERVERS[idx], ns_path, used_tcp, 0);
         if (!ip.empty()) return ip;
     }
     return "";

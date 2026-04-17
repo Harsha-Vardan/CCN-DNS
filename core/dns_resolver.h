@@ -197,9 +197,9 @@ private:
                      int                        depth = 0);
 
     // Resolve an NS name to its IP (used when no glue record is available).
-    std::string resolve_ns_name(const std::string&        ns_name,
-                                std::vector<std::string>& path,
-                                bool&                     used_tcp);
+    // Uses an isolated path vector internally to avoid loop-detection pollution.
+    std::string resolve_ns_name(const std::string& ns_name,
+                                bool&              used_tcp);
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
