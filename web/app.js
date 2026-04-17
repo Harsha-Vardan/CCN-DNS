@@ -94,7 +94,8 @@ function renderLookupResult(container, data) {
   const answers = (data.answers || []).map(a => {
     let dataHtml = esc(String(a.data));
     if (a.type === 'A' || a.type === 'AAAA' || a.type === 'CNAME') {
-      dataHtml = `<a href="http://${esc(String(a.data))}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dotted var(--accent); transition: color 0.15s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='inherit'">${esc(String(a.data))}</a>`;
+      const targetUrl = (a.type === 'CNAME') ? esc(String(a.data)) : esc(a.name);
+      dataHtml = `<a href="https://${targetUrl}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dotted var(--accent); transition: color 0.15s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='inherit'" title="Open ${targetUrl}">${esc(String(a.data))}</a>`;
     }
     return `
     <div class="answer-card">
