@@ -1,0 +1,48 @@
+CCN-DNS Project Development Log & Technology Stack
+===================================================
+
+This log documents the tools, languages, and architecture components used to build the complete DNS Resolution Service.
+
+1. Architecture
+----------------
+- C++ Engine (Backend resolver): Parses standard DNS UDP/TCP packets, implements LRU caching, traverses delegation hierarchies, manages socket timeouts.
+- Python Flask REST API (Middleware): Interfaces with the C++ executable via subprocess wrappers and stdout parsing. Features a second latency-optimized cache, connection metrics, benchmarking logic, rate tracking.
+- Browser Frontend (Web Dashboard): Serves an interactive HTML dashboard using pure Vanilla JS/CSS for minimal overhead.
+
+2. Languages
+-------------
+- C++ (Standard: C++17) for the core networking and packet manipulation.
+- Python 3 for the API layer and background processing.
+- HTML5 / CSS3 / Vanilla JavaScript (ES6) for the user interface.
+
+3. Core Libraries & APIs
+-------------------------
+C++ Standard Library:
+- <winsock2.h> / <sys/socket.h>: Low-level UDP and TCP network sockets.
+- <chrono>: Precision timeout implementations.
+- <random>: Transaction ID and root-server selection randomization.
+- <mutex> / <list> / <map>: Real-time thread-safe LRU caching.
+
+Python:
+- Flask (v2.3.0+): Main REST API framework.
+- Flask-CORS (v4.0.0+): For allowing Cross-Origin resource sharing directly to the dashboard.
+- Requests: Used strictly during the integration test suite (`pytest`) to hit API endpoints.
+- struct / socket: Used in Python middleware to execute low-level UDP queries to Google (8.8.8.8) and Cloudflare (1.1.1.1) for dashboard benchmarking comparisons.
+- subprocess: Sandboxed bridging to the C++ executable.
+
+4. UI Design System
+--------------------
+- Styling: Dark mode glassmorphism UI. Custom pure-CSS styles without bulk frameworks (No Tailwind).
+- Fonts: Google Fonts (Inter, JetBrains Mono).
+- Components: Grid metrics panel, auto-updating table displays, resolution path viz, recursive node graphics.
+
+5. Utilities
+-------------
+- MSYS2 / MinGW-w64 (g++): The compiler toolchain used for C++ on Windows.
+- Pytest: For comprehensive system testing.
+- Git: Source control.
+
+6. Standards 
+-------------
+- RFC 1035: Domain Names - Implementation and Specification (Framing, Compression, Delegation).
+- RFC 1034: Domain Names - Concepts and Facilities.

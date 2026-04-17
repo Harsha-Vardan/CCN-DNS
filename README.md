@@ -1,137 +1,242 @@
-# 🚀 Advanced DNS Resolver & Intelligent Caching System
+# 🌐 DNS Resolution Service
 
-A full-featured, Python-based DNS resolution system that implements **Recursive**, **Forwarding**, and **DNS-over-HTTPS (DoH)** resolution modes. It features a robust **TTL + LRU Cache**, **DNSSEC awareness**, and a modern **Streamlit GUI** for real-time visualization of DNS lookups, packet inspection, and resolution paths.
-
----
-
-## 🌟 Features
-
-### 🔹 Core Resolution Modes
-- **Recursive Resolver**: Performs full recursion starting from Root Servers (`.`) -> TLD -> Authoritative Servers.
-- **Forward Resolver**: Forwards queries to upstream DNS providers (e.g., Google `8.8.8.8`).
-- **DoH Resolver**: Securely resolves queries via HTTPS (DNS-over-HTTPS) using providers like Google or Cloudflare.
-- **AUTO Mode**: Intelligent fallback mechanism (Recursive → Forward → DoH) to guarantee resolution.
-
-### 🔹 Advanced Capabilities
-- **Intelligent Caching**: Implements Least Recently Used (LRU) eviction with Time-To-Live (TTL) enforcement.
-- **DNSSEC Awareness**: Detects and flags signed zones (RRSIG) and delegation signers (DS).
-- **Packet Inspection**: View raw DNS packet structures (Header, Question, Answer sections) in hex and parsed formats.
-- **Resolution Visualizer**: Graphically visualize the path taken by a recursive query.
-- **Local DNS Server**: Includes a UDP server running on port `5353` that can be queried via `dig` or `nslookup`.
-
-### 🔹 GUI & Analytics
-- **Interactive Dashboard**: Built with Streamlit for easy interaction.
-- **Performance Metrics**: Track average latency, cache hit/miss ratios, and query modes.
-- **Cache Explorer**: View currently cached records and their remaining TTL.
+**RFC 1035-compliant Recursive DNS Resolver**  
+*C++ Engine · Python REST API · Real-time Web Dashboard*
 
 ---
 
-## 🛠️ Installation
+## 🏗 Architecture  (PRD §8)
 
-### Prerequisites
-- Python 3.9+
-- `pip`
-- Node.js and `npm` (for Electron GUI)
-
-### Setup
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/Harsha-Vardan/CCN-DNS.git
-   cd CCN-DNS
-   ```
-
-2. Install dependencies:
-   ```bash
-   pip install streamlit requests graphviz pandas
-   ```
-   ```
-   *(Note: `graphviz` also requires the Graphviz system binary to be installed and in your PATH for the visualization to work)*
-
-3. Install Electron GUI dependencies:
-   ```bash
-   cd electron_gui
-   npm install
-   cd ..
-   ```
-   *(This restores the `node_modules` folder required for the GUI)*
+```
+Client (Browser / curl)
+        ↓  HTTP
+  api/server.py  ──────  Flask REST API  (Python)
+        ↓  subprocess (JSON over stdout)
+  core/dns_resolver  ─── C++ Resolver Engine
+        ├── LRU + TTL Cache
+        └── Recursive Resolution
+                ↓  UDP / TCP  (port 53)
+        Root → TLD → Authoritative DNS Servers
+                ↓
+        Response parsed & cached
+                ↓
+  JSON response back to client
+```
 
 ---
 
-## 🚀 Usage
+## 📁 Project Structure
 
-### 1. Run the GUI Application
-Launch the interactive dashboard to perform lookups and visualize data.
+```
+CCN-DNS/
+├── core/
+│   ├── dns_resolver.h         # C++ header — structs, classes, API
+│   └── dns_resolver.cpp       # Full implementation (RFC 1035 §4)
+├── api/
+│   └── server.py              # Flask REST API layer
+├── web/
+│   ├── index.html             # Interactive web dashboard
+│   ├── style.css              # Dark glassmorphism UI
+│   └── app.js                 # Frontend logic
+├── tests/
+│   └── test_api.py            # Integration test suite
+├── build.bat                  # Windows  — compile C++ binary
+├── build.sh                   # Linux/macOS — compile C++ binary
+├── run.bat                    # Windows  — start all services
+├── requirements.txt           # Python pip deps
+└── README.md
+```
+
+---
+
+## ⚡ Quick Start
+
+### Step 1 — Compile the C++ Resolver
+
+**Windows** (requires [MSYS2](https://www.msys2.org/) + MinGW g++):
+```bat
+# Install MinGW if needed:
+#   pacman -S mingw-w64-ucrt-x86_64-gcc
+build.bat
+```
+
+**Linux / macOS**:
 ```bash
-streamlit run gui/app_streamlit.py
-```
-Open your browser to the URL shown (usually `http://localhost:8501`).
-
-
-
-### 2. Run the Electron GUI
-Launch the desktop application.
-```bash
-cd electron_gui
-npm start
+chmod +x build.sh
+./build.sh
 ```
 
-### 3. Run the Local DNS Server
-(Optional) Start the local UDP server to accept standard DNS queries.
-```bash
-# You may need to run this script directly or adapt it to run as a standalone service
-python -m dns_resolver.server_local_dns
-```
-Query it using `dig`:
-```bash
-dig @127.0.0.1 -p 5353 google.com
-```
+The binary is written to `core/dns_resolver.exe` (Windows) or `core/dns_resolver` (Linux/macOS).
 
-### 4. Run Tests
-Verify the integrity of the system by running the unit test suite.
+---
+
+### Step 2 — Install Python Dependencies
 ```bash
-python -m unittest discover tests
+pip install -r requirements.txt
 ```
 
 ---
 
-## 📂 Project Structure
-
+### Step 3 — Start the API Server
+```bash
+python api/server.py
 ```
-dns_project/
-├── dns_resolver/           # Core Logic
-│   ├── packet.py           # DNS Packet Construction
-│   ├── parser.py           # Response Parsing
-│   ├── recursive_resolver.py # Recursive Logic
-│   ├── forward_resolver.py # Forwarding Logic
-│   ├── transport_doh.py    # DoH Transport
-│   ├── cache.py            # LRU + TTL Cache
-│   ├── dnssec.py           # DNSSEC Detection
-│   └── ...
-├── gui/                    # Streamlit Interface
-│   ├── app_streamlit.py    # Main App Entry
-│   └── components/         # UI Components
-├── tests/                  # Unit Tests
-└── main_cli.py             # CLI Entry Point (Optional)
+Flask listens on **http://127.0.0.1:5000**.
+
+---
+
+### Step 4 — Open the Web Dashboard
+Open `web/index.html` in your browser (or just double-click it).
+
+> **All-in-one Windows launcher:** `run.bat` does steps 1–4 automatically.
+
+---
+
+## 🔌 REST API Reference
+
+### `GET /resolve`
+Perform DNS resolution.
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `domain`  | ✅ yes   | —       | Domain name to resolve |
+| `type`    | ✗ no    | `A`     | Record type: `A`, `AAAA`, `NS`, `MX`, `CNAME`, `TXT`, `PTR`, `SOA` |
+
+**Success response** (200):
+```json
+{
+  "domain":          "example.com",
+  "ip":              "93.184.216.34",
+  "record_type":     "A",
+  "cached":          false,
+  "latency_ms":      217.4,
+  "used_tcp":        false,
+  "answers":         [{"name":"example.com","type":"A","ttl":86400,"data":"93.184.216.34"}],
+  "resolution_path": ["198.41.0.4","192.12.94.30","199.43.135.53"]
+}
+```
+
+**Error response** (400 / 404 / 503):
+```json
+{ "error": "Resolution failed — no authoritative answer for example.invalid" }
 ```
 
 ---
 
-## 📊 Architecture
+### `GET /cache`
+Returns current cache state and statistics.
 
-The system uses a layered architecture:
-1. **GUI Layer**: Streamlit interface for user interaction.
-2. **API Layer**: Unified `ResolverAPI` that manages modes and fallback logic.
-3. **Resolution Layer**: Specialized resolvers (Recursive, Forward, DoH).
-4. **Cache Layer**: Intercepts requests to serve cached data instantly.
-5. **Transport Layer**: Handles raw UDP sockets and HTTPS requests.
+```json
+{
+  "stats":   { "size": 42, "capacity": 1000, "hits": 105, "misses": 42, "hit_rate": 71.4 },
+  "entries": [ { "domain": "google.com", "type": "A", "ip": "142.250.182.46", "remaining_ttl": 287, "status": "valid" } ]
+}
+```
+
+### `DELETE /cache`
+Clears all cached records.
+
+### `GET /metrics`
+Returns query statistics: total queries, success rate, average latency, cache hit rate, TCP fallback count, recent query history.
+
+### `POST /benchmark`
+Compares the local resolver against Google (8.8.8.8) and Cloudflare (1.1.1.1).
+
+**Request body:**
+```json
+{ "domains": ["google.com", "example.com"], "type": "A" }
+```
+
+### `GET /health`
+Service health check — verifies the C++ binary is compiled and present.
 
 ---
 
-## 🔮 Future Improvements
-- Full DNSSEC validation (cryptographic signature verification).
-- DNS-over-TLS (DoT) support.
-- GeoIP mapping for resolved IP addresses.
+## ⚙️ C++ Resolver — Command Line
+
+```bash
+# Usage:
+core/dns_resolver.exe <domain> [A|AAAA|NS|MX|CNAME|TXT]
+
+# Examples:
+core/dns_resolver.exe google.com A
+core/dns_resolver.exe gmail.com MX
+core/dns_resolver.exe cloudflare.com NS
+
+# Output (JSON to stdout):
+{
+  "success": true,
+  "domain": "google.com",
+  "qtype": "A",
+  "cached": false,
+  "used_tcp": false,
+  "latency_ms": 213.500,
+  "answers": [{"name":"google.com","type":"A","ttl":300,"data":"142.250.182.46"}],
+  "resolution_path": ["198.41.0.4","192.12.94.30","216.239.34.10"]
+}
+```
 
 ---
 
-**Author**: Harsha Vardan
+## 🧪 Running Tests
+
+```bash
+# Start the API first, then:
+pip install pytest requests
+python -m pytest tests/ -v
+```
+
+Tests cover:
+- ✅ Health check
+- ✅ A, NS, MX resolution
+- ✅ Cache hit (second request must be cached)
+- ✅ Input validation (missing domain, bad chars, invalid type)
+- ✅ NXDOMAIN handling
+- ✅ Cache clear + re-resolution
+- ✅ Metrics correctness
+- ✅ Benchmark endpoint
+- ✅ **PRD §11 cache efficiency** — ≥70% hit rate over repeated queries
+
+---
+
+## 🔧 Key Implementation Details
+
+### C++ DNS Engine (`core/dns_resolver.cpp`)
+
+| Feature | Detail |
+|---------|--------|
+| Packet builder | RFC 1035 §4 binary format, length-prefix QNAME encoding |
+| Packet parser | Full wire-format parsing with §4.1.4 pointer compression |
+| UDP transport | `select()` timeout, up to 4096-byte receive buffer |
+| TCP fallback | 2-byte length-prefix framing (RFC 1035 §4.2.2), activated when TC bit is set |
+| Recursive walk | Root → TLD → NS referrals with glue record extraction |
+| CNAME following | Automatically follows CNAME chains up to 10 deep |
+| Cache | Thread-safe LRU eviction + TTL expiry (1000 entry default) |
+| JSON output | Compact, manually serialised (no runtime dependency) |
+
+### Python API Layer (`api/server.py`)
+
+| Feature | Detail |
+|---------|--------|
+| Cache | Second Python-side LRU+TTL cache for sub-millisecond repeat hits |
+| Validation | Domain length/character checking, record type whitelist |
+| Metrics | Rolling 1000-query history with latency stats |
+| Benchmark | Cold + warm local timing vs public resolvers |
+| Threading | Flask `threaded=True` — handles concurrent requests |
+
+---
+
+## 🔮 Future Enhancements (PRD §13)
+
+- AAAA / IPv6 full support
+- DNSSEC validation (cryptographic signature verification)
+- DNS-over-TLS (DoT)
+- Parallel NS resolution for lower latency
+- Distributed Redis cache
+- Docker containerisation
+- Rate limiting middleware
+
+---
+
+**Stack:** C++ (networking engine) · Python / Flask (API layer) · HTML/CSS/JS (dashboard)  
+**Protocol:** RFC 1035, RFC 1034 · UDP + TCP port 53

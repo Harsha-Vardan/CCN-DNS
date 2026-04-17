@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DNS Resolution Service — Dashboard</title>
+  <meta name="description"
+    content="RFC 1035-compliant recursive DNS resolver with real-time caching, metrics and packet visualization." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ══════════════════════════  SIDEBAR  ═══════════════════════════════════ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="logo">
+      <span class="logo-icon">⬡</span>
+      <span class="logo-text">DNS<span class="accent">Core</span></span>
+    </div>
+    <p class="logo-sub">RFC 1035 Resolver</p>
+  </div>
+
+  <nav class="nav">
+    <button class="nav-btn active" onclick="switchTab('lookup')"   id="nav-lookup">
+      <span class="nav-icon">🔍</span><span>Lookup</span>
+    </button>
+    <button class="nav-btn"        onclick="switchTab('path')"     id="nav-path">
+      <span class="nav-icon">🗺</span><span>Resolution Path</span>
+    </button>
+    <button class="nav-btn"        onclick="switchTab('cache')"    id="nav-cache">
+      <span class="nav-icon">⚡</span><span>Cache</span>
+    </button>
+    <button class="nav-btn"        onclick="switchTab('metrics')"  id="nav-metrics">
+      <span class="nav-icon">📊</span><span>Metrics</span>
+    </button>
+    <button class="nav-btn"        onclick="switchTab('bench')"    id="nav-bench">
+      <span class="nav-icon">🏁</span><span>Benchmark</span>
+    </button>
+    <button class="nav-btn"        onclick="switchTab('packet')"   id="nav-packet">
+      <span class="nav-icon">📡</span><span>Packet</span>
+    </button>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="status-indicator" id="status-dot">
+      <span class="dot pulse"></span>
+      <span id="status-text">Checking…</span>
+    </div>
+    <p class="footer-label">C++ Engine + Flask API</p>
+  </div>
+</aside>
+
+<!-- ══════════════════════════  MAIN CONTENT  ═══════════════════════════════ -->
+<main class="main" id="main">
+
+  <!-- ───────────────────────  LOOKUP TAB  ──────────────────────────────── -->
+  <section class="tab active" id="tab-lookup">
+    <div class="page-header">
+      <h1>DNS Lookup</h1>
+      <p class="page-sub">Recursive resolution: Root → TLD → Authoritative</p>
+    </div>
+
+    <div class="card control-card">
+      <div class="input-row">
+        <div class="field">
+          <label for="domain-input">Domain Name</label>
+          <input id="domain-input" type="text" placeholder="e.g. google.com"
+                 value="google.com" autocomplete="off"
+                 onkeydown="if(event.key==='Enter')resolveDNS()" />
+        </div>
+        <div class="field field-sm">
+          <label for="type-select">Record Type</label>
+          <select id="type-select">
+            <option value="A"     selected>A</option>
+            <option value="AAAA">AAAA</option>
+            <option value="NS">NS</option>
+            <option value="MX">MX</option>
+            <option value="CNAME">CNAME</option>
+            <option value="TXT">TXT</option>
+            <option value="PTR">PTR</option>
+            <option value="SOA">SOA</option>
+          </select>
+        </div>
+        <button class="btn-primary" id="resolve-btn" onclick="resolveDNS()">
+          <span id="resolve-btn-label">Resolve</span>
+        </button>
+      </div>
+
+      <!-- Quick domains -->
+      <div class="quick-domains">
+        <span class="quick-label">Quick:</span>
+        <button class="chip" onclick="quickResolve('google.com')">google.com</button>
+        <button class="chip" onclick="quickResolve('cloudflare.com')">cloudflare.com</button>
+        <button class="chip" onclick="quickResolve('github.com')">github.com</button>
+        <button class="chip" onclick="quickResolve('wikipedia.org')">wikipedia.org</button>
+      </div>
+    </div>
+
+    <div id="lookup-result" class="result-area">
+      <div class="placeholder">
+        <span class="placeholder-icon">🌐</span>
+        <p>Enter a domain and click <strong>Resolve</strong></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────  PATH TAB  ────────────────────────────────── -->
+  <section class="tab" id="tab-path">
+    <div class="page-header">
+      <h1>Resolution Path</h1>
+      <p class="page-sub">Visualise the DNS delegation chain</p>
+    </div>
+
+    <div class="card control-card">
+      <div class="input-row">
+        <div class="field">
+          <label for="path-domain">Domain Name</label>
+          <input id="path-domain" type="text" value="example.com"
+                 onkeydown="if(event.key==='Enter')renderPath()" />
+        </div>
+        <div class="field field-sm">
+          <label for="path-type">Type</label>
+          <select id="path-type">
+            <option value="A" selected>A</option>
+            <option value="AAAA">AAAA</option>
+            <option value="NS">NS</option>
+            <option value="MX">MX</option>
+          </select>
+        </div>
+        <button class="btn-primary" onclick="renderPath()">Trace Path</button>
+      </div>
+    </div>
+
+    <div id="path-output" class="card path-container">
+      <div class="placeholder">
+        <span class="placeholder-icon">🗺</span>
+        <p>Click <strong>Trace Path</strong> to visualise the resolution chain</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────  CACHE TAB  ───────────────────────────────── -->
+  <section class="tab" id="tab-cache">
+    <div class="page-header">
+      <h1>Cache Viewer</h1>
+      <p class="page-sub">LRU + TTL in-memory cache state</p>
+    </div>
+
+    <div class="card">
+      <div class="cache-toolbar">
+        <div id="cache-stats-bar" class="cache-stats-bar">
+          <span class="stat-pill">Size: <b id="cs-size">—</b></span>
+          <span class="stat-pill">Hits: <b id="cs-hits">—</b></span>
+          <span class="stat-pill">Misses: <b id="cs-misses">—</b></span>
+          <span class="stat-pill">Hit Rate: <b id="cs-hitrate">—</b></span>
+        </div>
+        <div class="cache-actions">
+          <button class="btn-ghost" onclick="loadCache()">↻ Refresh</button>
+          <button class="btn-danger" onclick="clearCache()">🗑 Clear</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table id="cache-table">
+          <thead>
+            <tr>
+              <th>Domain</th>
+              <th>Type</th>
+              <th>Resolved IP</th>
+              <th>TTL Remaining</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="cache-body">
+            <tr><td colspan="5" class="empty-row">Cache is empty — perform a lookup first</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────  METRICS TAB  ─────────────────────────────── -->
+  <section class="tab" id="tab-metrics">
+    <div class="page-header">
+      <h1>Query Metrics</h1>
+      <p class="page-sub">Latency, cache efficiency and query history</p>
+    </div>
+
+    <div class="metrics-grid" id="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-label">Total Queries</div>
+        <div class="metric-value" id="m-total">—</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Cache Hit Rate</div>
+        <div class="metric-value accent" id="m-hitrate">— %</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Avg Latency</div>
+        <div class="metric-value" id="m-avg">— ms</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Min / Max</div>
+        <div class="metric-value" id="m-minmax">— / —</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Success Rate</div>
+        <div class="metric-value green" id="m-success">— %</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">TCP Fallbacks</div>
+        <div class="metric-value orange" id="m-tcp">—</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:24px;">
+      <div class="card-title">Recent Queries</div>
+      <div class="table-wrap">
+        <table id="recent-table">
+          <thead>
+            <tr><th>Domain</th><th>Type</th><th>Latency</th><th>Cached</th><th>Status</th></tr>
+          </thead>
+          <tbody id="recent-body">
+            <tr><td colspan="5" class="empty-row">No queries yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <button class="btn-ghost" style="margin-top:12px;" onclick="loadMetrics()">↻ Refresh</button>
+    </div>
+  </section>
+
+  <!-- ───────────────────────  BENCHMARK TAB  ───────────────────────────── -->
+  <section class="tab" id="tab-bench">
+    <div class="page-header">
+      <h1>Benchmark</h1>
+      <p class="page-sub">Local resolver vs Google (8.8.8.8) vs Cloudflare (1.1.1.1)</p>
+    </div>
+
+    <div class="card control-card">
+      <div class="input-row">
+        <div class="field" style="flex:1;">
+          <label for="bench-domains">Domains (comma-separated)</label>
+          <input id="bench-domains" type="text"
+                 value="google.com, example.com, github.com, cloudflare.com" />
+        </div>
+        <div class="field field-sm">
+          <label for="bench-type">Type</label>
+          <select id="bench-type"><option value="A">A</option><option value="AAAA">AAAA</option></select>
+        </div>
+        <button class="btn-primary" id="bench-btn" onclick="runBenchmark()">Run Benchmark</button>
+      </div>
+    </div>
+
+    <div id="bench-result" class="card" style="min-height:200px;">
+      <div class="placeholder">
+        <span class="placeholder-icon">🏁</span>
+        <p>Click <strong>Run Benchmark</strong> to compare resolvers</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────  PACKET TAB  ──────────────────────────────── -->
+  <section class="tab" id="tab-packet">
+    <div class="page-header">
+      <h1>Packet Inspector</h1>
+      <p class="page-sub">RFC 1035 binary wire format — annotated hex dump</p>
+    </div>
+
+    <div class="card control-card">
+      <div class="input-row">
+        <div class="field">
+          <label for="pkt-domain">Domain</label>
+          <input id="pkt-domain" type="text" value="example.com" />
+        </div>
+        <div class="field field-sm">
+          <label for="pkt-type">Type</label>
+          <select id="pkt-type">
+            <option value="A">A</option>
+            <option value="AAAA">AAAA</option>
+            <option value="NS">NS</option>
+            <option value="MX">MX</option>
+          </select>
+        </div>
+        <button class="btn-primary" onclick="inspectPacket()">Generate</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Wire Format (hex)</div>
+      <pre id="pkt-output" class="hex-dump">Click Generate to see the raw DNS query bytes.</pre>
+      <div id="pkt-annotation" class="pkt-annotation"></div>
+    </div>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
