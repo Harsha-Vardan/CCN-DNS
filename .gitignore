@@ -12,6 +12,9 @@ core/dns_resolver
 # Test scripts (local smoke-tests, not part of the project deliverable)
 tests/
 
+# Private project knowledge file (local reference only)
+DEVNOTES.md
+
 # IDE / OS
 node_modules/
 .vscode/

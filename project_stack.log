@@ -1,48 +1,172 @@
 CCN-DNS Project Development Log & Technology Stack
 ===================================================
+Last updated: 2026-04-18
 
-This log documents the tools, languages, and architecture components used to build the complete DNS Resolution Service.
+This log documents every tool, language, architecture decision, and bug fix
+applied during the development of the DNS Resolution Service.
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. Architecture
-----------------
-- C++ Engine (Backend resolver): Parses standard DNS UDP/TCP packets, implements LRU caching, traverses delegation hierarchies, manages socket timeouts.
-- Python Flask REST API (Middleware): Interfaces with the C++ executable via subprocess wrappers and stdout parsing. Features a second latency-optimized cache, connection metrics, benchmarking logic, rate tracking.
-- Browser Frontend (Web Dashboard): Serves an interactive HTML dashboard using pure Vanilla JS/CSS for minimal overhead.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Three-tier design:
 
-2. Languages
--------------
-- C++ (Standard: C++17) for the core networking and packet manipulation.
-- Python 3 for the API layer and background processing.
-- HTML5 / CSS3 / Vanilla JavaScript (ES6) for the user interface.
+  Tier 1 — Core (C++17)
+    core/dns_resolver.cpp + dns_resolver.h
+    Compiled to: core/dns_resolver.exe (Windows) / core/dns_resolver (Unix)
+    Responsibilities:
+      - Build and parse RFC 1035 DNS packets (binary wire format)
+      - UDP transport with select() timeout (2 s/hop)
+      - TCP fallback when TC (Truncation) bit is set (RFC 1035 §4.2.2)
+      - Recursive walk: Root → TLD → Authoritative name servers
+      - CNAME chain following (try same NS, then 3 random roots)
+      - Glue-less NS resolution (isolated path vector per lookup)
+      - Loop detection (visited-server set per resolution chain)
+      - Thread-safe LRU + TTL cache (1 000 entries, std::list + std::map)
+      - JSON serialisation to stdout (no external deps)
 
+  Tier 2 — API (Python 3 / Flask)
+    api/server.py
+    Responsibilities:
+      - Expose HTTP endpoints: /resolve /cache /metrics /benchmark /health
+      - Spawn C++ subprocess; parse JSON from stdout
+      - Python-side LRU+TTL cache (OrderedDict, sub-ms repeat hits)
+      - Python fallback resolver — raw UDP to 8.8.8.8 with pointer
+        decompression, used when C++ walk times out or returns failure
+      - Rolling metrics history (1 000-query deque)
+      - Benchmark: cold + warm local vs Google 8.8.8.8 vs Cloudflare 1.1.1.1
+      - Subprocess timeout: 30 s (increased from 15 s for deep CNAME chains)
+      - Flask threaded=True for concurrent request handling
+      - CORS enabled for browser dashboard access
+
+  Tier 3 — Web UI (HTML/CSS/JS)
+    web/index.html, style.css, app.js
+    Responsibilities:
+      - DNS Lookup tab (input domain + record type, show answers)
+      - Resolution Path visualiser (hop-by-hop server trace)
+      - Cache viewer (live table with TTL countdown)
+      - Metrics dashboard (latency stats, history table)
+      - Benchmark tab (bar charts, winner highlight)
+      - Packet Inspector (hex dump + RFC 1035 field annotation)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. Languages & Standards
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  - C++17          — core networking engine, packet parsing, caching
+  - Python 3.10+   — API layer, fallback resolver, metrics
+  - HTML5 / CSS3   — dashboard markup and dark glassmorphism UI
+  - Vanilla JS ES6 — frontend logic (no frameworks)
+  - RFC 1035       — DNS Implementation and Specification
+  - RFC 1034       — DNS Concepts and Facilities
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 3. Core Libraries & APIs
--------------------------
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 C++ Standard Library:
-- <winsock2.h> / <sys/socket.h>: Low-level UDP and TCP network sockets.
-- <chrono>: Precision timeout implementations.
-- <random>: Transaction ID and root-server selection randomization.
-- <mutex> / <list> / <map>: Real-time thread-safe LRU caching.
+  <winsock2.h> / <sys/socket.h>  — UDP and TCP socket I/O
+  <ws2tcpip.h>                   — inet_addr, sockaddr_in
+  <chrono>                       — high-resolution timing (latency_ms)
+  <random>                       — transaction ID + root-server selection
+  <mutex>, <list>, <map>         — thread-safe LRU cache
+  <sstream>, <iomanip>           — JSON serialisation without dependencies
 
-Python:
-- Flask (v2.3.0+): Main REST API framework.
-- Flask-CORS (v4.0.0+): For allowing Cross-Origin resource sharing directly to the dashboard.
-- Requests: Used strictly during the integration test suite (`pytest`) to hit API endpoints.
-- struct / socket: Used in Python middleware to execute low-level UDP queries to Google (8.8.8.8) and Cloudflare (1.1.1.1) for dashboard benchmarking comparisons.
-- subprocess: Sandboxed bridging to the C++ executable.
+Python stdlib:
+  socket, struct   — raw UDP packet build + send for fallback resolver
+  subprocess       — spawn C++ binary, capture stdout/stderr
+  threading        — cache lock, Flask thread mode, browser-open timer
+  collections      — OrderedDict (LRU cache), deque (metrics ring buffer)
+  random           — transaction ID in fallback_resolve()
+  time             — TTL expiry calculation
 
+Python packages (requirements.txt):
+  Flask 2.3.0+     — REST API framework
+  flask-cors 4.0+  — CORS headers for browser dashboard
+  requests         — used in test suite (not in production path)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 4. UI Design System
---------------------
-- Styling: Dark mode glassmorphism UI. Custom pure-CSS styles without bulk frameworks (No Tailwind).
-- Fonts: Google Fonts (Inter, JetBrains Mono).
-- Components: Grid metrics panel, auto-updating table displays, resolution path viz, recursive node graphics.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Theme       : Dark mode glassmorphism (HSL palette, rgba overlays)
+  Fonts       : Google Fonts — Inter (UI text), JetBrains Mono (data)
+  Layout      : CSS Grid sidebar + main content; no frameworks
+  Components  : Metric cards, answer-card list, resolution path flow,
+                hop list, mini-bar benchmark chart, hex dump inspector
+  Animations  : Spinner on resolve, pulse dot (status), hover transitions
+  Responsive  : Fluid layout, min-width 900 px
 
-5. Utilities
--------------
-- MSYS2 / MinGW-w64 (g++): The compiler toolchain used for C++ on Windows.
-- Pytest: For comprehensive system testing.
-- Git: Source control.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. Toolchain & Utilities
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Compiler    : MSYS2 / MinGW-w64 g++ (Windows)
+                  pacman -S mingw-w64-ucrt-x86_64-gcc
+  Compile cmd : g++ -std=c++17 -O2 -Wall core\dns_resolver.cpp
+                  -o core\dns_resolver.exe -lws2_32
+  Build scripts: build.bat (Windows), build.sh (Linux/macOS)
+  Run script  : run.bat (compiles + starts Flask + opens browser)
+  Git         : feature/dns-dashboard branch
+  VCS host    : github.com/Ganesh172919/onWings  (monorepo, CCN-DNS subdir)
 
-6. Standards 
--------------
-- RFC 1035: Domain Names - Implementation and Specification (Framing, Compression, Delegation).
-- RFC 1034: Domain Names - Concepts and Facilities.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. Bug-Fix History
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Session: 2026-04-18  (commit cf73738)
+
+  BUG-01 [C++] Loop explosion in recursive walk
+    Symptom : instagram.com / facebook.com returned "Resolution failed"
+    Root    : walk() had no visited-server guard; revisiting the same
+              nameserver caused infinite delegation loops
+    Fix     : Added O(n) visited check before pushing ns_ip to path
+
+  BUG-02 [C++] CNAME chain restarted from a random root every time
+    Symptom : Multi-hop CNAME domains (CDN-heavy: instagram, facebook)
+              failed because restarting from root lost the delegation context
+    Fix     : On CNAME, first try the current authoritative NS; if that
+              fails, try 3 random roots (not all 13)
+
+  BUG-03 [C++] Glue-less NS resolution polluted the main path vector
+    Symptom : resolve_ns_name() passed the shared `path` vector to walk(),
+              so NS hostname lookups added many entries, triggering the
+              MAX_REFERRALS=30 limit and false loop-detection hits
+    Fix     : resolve_ns_name() now uses its own local std::vector<string>
+              per attempt; main resolution path is untouched
+
+  BUG-04 [C++] Per-hop UDP timeout too high during NS fan-out
+    Symptom : With 3 s/hop × many glue-less NS lookups the 15 s Flask
+              timeout was regularly exceeded
+    Fix     : Reduced per-hop UDP timeout from implicit 3 s to 2 s;
+              increased Flask RESOLVER_TIMEOUT from 15 s to 30 s
+
+  BUG-05 [C++] Truncated UDP responses not retried via TCP in walk()
+    Symptom : Responses with TC bit set were silently dropped
+    Fix     : Explicit TC check in walk(); retry via send_tcp() if set
+
+  BUG-06 [Python] No fallback when C++ walk fails
+    Symptom : Domains with complex CDN CNAME chains returned 503/404
+              even when 8.8.8.8 could answer in <5 ms
+    Fix     : Added fallback_resolve() — raw UDP to 8.8.8.8 with full
+              RFC 1035 pointer decompression; called on both timeout
+              (RuntimeError) and success=False response from C++
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. Verification Results (2026-04-18)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  instagram.com   → 57.144.52.34       598 ms   recursive
+  facebook.com    → 57.144.52.1        434 ms   recursive
+  wikipedia.org   → 103.102.166.224    610 ms   recursive
+  google.com      → 142.250.205.142    270 ms   recursive
+  youtube.com     → 142.250.77.142     205 ms   recursive
+  twitter.com     → 172.66.0.227      2107 ms   recursive
+  amazon.com      → 98.82.161.185      667 ms   recursive
+  reddit.com      → 151.101.1.140     1176 ms   recursive
+  netflix.com     → 18.200.8.190       408 ms   recursive
+  github.com      → 20.207.73.82      1115 ms   recursive
+
+  RESULT: 10/10 PASSED
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8. Git History (feature/dns-dashboard)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  cf73738  fix: resolve CNAME-heavy domains (instagram, facebook, wikipedia, etc.)
+  8764e9c  Update UI IP address anchor tags to resolve Host Header blocks
+  f8f19cf  Complete DNS resolution service with C++ engine, Python API, and Flask dashboard
+  66751eb  Added MongoDB storage
+  705001b  Update README with Electron GUI instructions
